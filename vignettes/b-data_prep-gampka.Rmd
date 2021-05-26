@@ -1,0 +1,206 @@
+---
+title: "temp"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{temp}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+
+
+
+
+
+
+
+
+Harris R.B., White G.C., Schwartz C.C. & Haroldson M.A.
+(2007) Population growth of Yellowstone grizzly bears:
+uncertainty and future monitoring. Ursus, 18, 167-177.
+
+
+Eberhardt L.L. & Breiwick J.M. (2010) Trend of the
+Yellowstone grizzly bear population. Int. J. Ecol. doi:
+10.1155/2010/924197.
+
+Eberhardt L.L. & Knight R. R. (1996) How many grizzlies in
+Yellowstone? J. Wildlife Manage., 60, 416-421.
+
+
+
+```{r setup}
+library(gamkapva)
+load("~/Box Sync/R/gamkapva/data/GMNR_zebra.rda")
+```
+
+
+```{r}
+head(GMNR_zebra)
+plot(N.zebra ~ year, data = GMNR_zebra, type = "b")
+
+```
+
+Log plot
+```{r}
+plot(log(N.zebra) ~ year, data = GMNR_zebra, type = "b")
+log_mod <- lm(log(N.zebra) ~ year, data = GMNR_zebra)
+abline(log_mod, col = 2, lwd = 3, lty = 4)
+mu_log <- coef(log_mod)["year"]
+lambda_log <- exp(mu_log)
+```
+
+
+Calculate lambda
+```{r}
+lambda.i <- GMNR_zebra$N.zebra[-1]/GMNR_zebra$N.zebra[-nrow(GMNR_zebra)]
+lambda.i <- c(lambda.i,NA)
+GMNR_zebra$lambda.i <- lambda.i
+```
+
+
+```{r}
+hist(GMNR_zebra$lambda.i )
+```
+
+
+Calculate log(lambda)
+```{r}
+GMNR_zebra$log.lambda.i  <- log(GMNR_zebra$lambda.i )
+hist(GMNR_zebra$log.lambda.i )
+```
+
+
+Calculate x.i
+```{r}
+delta.t <- GMNR_zebra$year[-1]-GMNR_zebra$year[-nrow(GMNR_zebra)]
+GMNR_zebra$delta.t <- c(x.i,NA)
+GMNR_zebra$x.i <- sqrt(GMNR_zebra$delta.t)
+```
+
+
+Calculate y.i
+
+```{r}
+GMNR_zebra$y.i <- GMNR_zebra$log.lambda.i/GMNR_zebra$x.i
+```
+
+
+
+```{r}
+i.1yr.delta.t <- which(GMNR_zebra$delta.t == 1)
+lambda_naive <- mean(GMNR_zebra$lambda.i[i.1yr.delta.t], na.rm=T)
+mu_naive <- log(lambda_naive)
+```
+
+Model
+```{r}
+dennis_mod <- lm(y.i ~ 0 + x.i, data = GMNR_zebra)
+```
+
+
+Plot data 
+
+```{r}
+plot(y.i ~ x.i, data = GMNR_zebra, 
+     xlim = c(0,1.5),
+     ylim = c(-0.3,0.3))
+abline(dennis_mod, col = 2, lty = 2, lwd = 3)
+```
+
+
+Evaluate regression model
+```{r}
+summary(dennis_mod)
+anova(dennis_mod)
+confint(dennis_mod)
+
+mu_dennis <- coef(dennis_mod)
+
+mu_dennis - 0.03080*1.96
+mu_dennis + 0.03080*1.96
+
+lambda_dennis <- exp(mu_dennis)
+```
+
+Response: y.i
+          Df  Sum Sq  Mean Sq F value  Pr(>F)  
+x.i        1 0.08862 0.088615  3.9096 0.06196 .
+Residuals 20 0.45332 0.022666                  
+
+
+```{r}
+mu_naive
+mu_log
+mu_dennis
+
+lambda_naive
+lambda_log
+lambda_dennis
+```
+
+
+CI for sigma
+Chi sq dist w/ t-1 df
+```{r}
+# chi2.025 <- qchisq(0.025, df)  
+# chi2.975 <- qchisq(0.975, df)  
+# 
+# sigm2_dennis_ci_up <- df*sigma2_dennis/chi2.025
+# sigm2_dennis_ci_lo <- df*sigma2_dennis/chi2.975
+# 
+# sigma2_dennis_ci <- c(sigm2_dennis_ci_lo,sigm2_dennis_ci_up)
+
+qchisq(0.025, df)  #10.28290
+qchisq(0.975, df)  #35.47888
+```
+
+```{r}
+(df*0.022666)/qchisq(0.025, df) 
+(df*0.022666)/qchisq(0.975, df) 
+```
+
+
+>"For the mountain zebra population, the estimates of the population growth parameters mu_hat and sigma_hat were 0.052 (95% confidence intervals; lower = 0.004, upper = 0.108) and 0.020 (95% confidence intervals; lower = 0.012, upper = 0.042), respectively. Importantly, although mu_hat was positive, the lower confidence interval of sigma_hat was negative and the probability that the slope of the regression was zero, was 0.0659. This analysis suggests that the probability of population growth over the long term is uncertain"
+
+Error in interpretation: "the probability that the slope of the regression was zero, was 0.0659"
+
+
+Autcorrelation
+```{r}
+lmtest::dwtest(dennis_mod)
+lmtest::bgtest(dennis_mod)
+```
+
+
+
+Outlierts
+
+```{r}
+dffits(dennis_mod)
+
+## test for outliers using dffits (p.74)
+dffits(dennis_mod)[dffits(dennis_mod) > 2 * sqrt(1 / nrow(GMNR_zebra)) ]
+```
+
+
+
+
+```{r}
+popbio::countCDFxt(mu = mu_dennis,sig2 = 0.022666,
+                   nt = nrow(GMNR_zebra),
+                   Nc = GMNR_zebra$N.zebra[nrow(GMNR_zebra)],
+                   Ne = 10,
+                   tq = GMNR_zebra$year[nrow(GMNR_zebra)]-GMNR_zebra$year[1],
+                   Nboot = 10)
+```
+
